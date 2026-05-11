@@ -51,5 +51,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "GameJam2026.sln"
+    "dotnet.defaultSolution": "GameJam_PopcornCat.sln"
 }
