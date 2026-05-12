@@ -19,9 +19,9 @@ public class LevelManager : MonoBehaviour
         SceneManager.LoadScene(nextSceneName);
     }
 
-    public void GoToLevelSelect()
+    public void GoToMainMenu()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene("LevelSelect");
+        SceneManager.LoadScene("MainMenu");
     }
 }

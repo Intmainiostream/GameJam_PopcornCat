@@ -230,7 +230,7 @@ GameObject:
   - component: {fileID: 134161076}
   - component: {fileID: 134161075}
   m_Layer: 5
-  m_Name: LvlSelectBtn
+  m_Name: MainMenuBtn
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -683,14 +683,27 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  vignetteImage: {fileID: 0}
-  vignettePeakAlpha: 0.18
-  vignetteDuration: 0.12
-  shakeCameraOnToggle: 1
-  shakeMagnitude: 0.06
+  enableShake: 1
   shakeDuration: 0.08
+  shakeMagnitude: 0.06
+  shakeRoughness: 28
+  rotationAmount: 0.5
+  glitchLineCount: 18
+  glitchLineDuration: 0.35
+  glitchColorWorld: {r: 0.63, g: 0.55, b: 0.95, a: 0.55}
+  glitchMonoWorld: {r: 0.85, g: 0.85, b: 0.85, a: 0.45}
+  chromaticDuration: 0.28
+  chromaticStrength: 0.025
+  flashDuration: 0.12
+  flashPeakAlpha: 0.28
   colorOnlyTag: ColorOnly
   monoOnlyTag: MonoOnly
+  dustMain: {fileID: 0}
+  vignetteColor: {r: 0, g: 0, b: 0, a: 0.82}
+  vignetteFadeSpeed: 3.5
+  vignetteInner: 0.45
+  vignetteOuter: 1.05
+  vignetteSteps: 32
 --- !u!1 &396379846
 GameObject:
   m_ObjectHideFlags: 0
@@ -8596,7 +8609,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   levelCompleteUI: {fileID: 805913561}
-  nextSceneName: 
+  nextSceneName: Level4Scene
 --- !u!4 &1328430190
 Transform:
   m_ObjectHideFlags: 0
