@@ -475,6 +475,7 @@ GameObject:
   - component: {fileID: 160992126}
   - component: {fileID: 160992125}
   - component: {fileID: 160992128}
+  - component: {fileID: 160992129}
   m_Layer: 6
   m_Name: TimePlatform
   m_TagString: Ground
@@ -603,6 +604,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveDistance: 1
   moveSpeed: 3
+--- !u!50 &160992129
+Rigidbody2D:
+  serializedVersion: 4
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 160992122}
+  m_BodyType: 0
+  m_Simulated: 1
+  m_UseFullKinematicContacts: 0
+  m_UseAutoMass: 0
+  m_Mass: 1
+  m_LinearDrag: 0
+  m_AngularDrag: 0.05
+  m_GravityScale: 1
+  m_Material: {fileID: 0}
+  m_Interpolate: 0
+  m_SleepingMode: 1
+  m_CollisionDetection: 0
+  m_Constraints: 0
 --- !u!1 &173282330
 GameObject:
   m_ObjectHideFlags: 0
@@ -8309,7 +8331,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   levelCompleteUI: {fileID: 805913561}
-  nextSceneName: 
+  nextSceneName: Level5Scene
 --- !u!4 &1328430190
 Transform:
   m_ObjectHideFlags: 0
