@@ -63,6 +63,24 @@ public class WorldToggle : MonoBehaviour
     [Tooltip("Number of radial steps used to draw the vignette (more = smoother).")]
     [SerializeField] private int   vignetteSteps     = 32;
 
+    // ── World Switch Sounds ───────────────────────────────────────────────────
+    [Header("World Switch Sounds")]
+    [Tooltip("Plays the moment Shift is pressed (entering Mono world).")]
+    [SerializeField] private AudioClip shiftPressSound;
+    [Tooltip("Plays the moment Shift is released (returning to Color world).")]
+    [SerializeField] private AudioClip shiftReleaseSound;
+    [Tooltip("Plays while Shift is held — loops until released.")]
+    [SerializeField] private AudioClip shiftHoldSound;
+    [Tooltip("Volume for all sounds.")]
+    [SerializeField] [Range(0f, 1f)] private float switchSoundVolume = 1f;
+
+    // ── Leaf Particles (BLACK in Mono world) ───────────────────────────────────
+    [Header("Leaf Particles (BLACK in Mono)")]
+    [Tooltip("Drag the LeafParticles GameObject here (under Particles/FX).")]
+    [SerializeField] private ParticleSystem leafParticles;
+    [Tooltip("How fast the leaf color transitions to black and back (seconds).")]
+    [SerializeField] private float leafColorTransitionDuration = 0.25f;
+
     // ── Public ────────────────────────────────────────────────────────────────
     public static WorldToggle Instance { get; private set; }
     public bool IsMonoWorld { get; private set; } = false;
@@ -72,11 +90,23 @@ public class WorldToggle : MonoBehaviour
     private Vector3              _camOriginPos;
     private CameraGlitchRenderer _glitchRenderer;
 
-    private Coroutine _bgRoutine;
-    private Coroutine _shakeRoutine;
+    private Coroutine   _bgRoutine;
+    private Coroutine   _shakeRoutine;
+    private Coroutine   _holdSoundRoutine;
+    private Coroutine   _leafColorRoutine;
+    private AudioSource _audioSource;
 
     private GameObject[] _colorOnlyObjects = new GameObject[0];
     private GameObject[] _monoOnlyObjects  = new GameObject[0];
+
+    // Cached original leaf start color
+    private Color _leafOriginalColor = Color.white;
+    private Color _leafBlackColor    = Color.black;   // BLACK color for mono world
+    private bool  _leafColorCached   = false;
+
+    // Tracks the CURRENT effective startColor (what newly spawned particles get)
+    // so mid-transition interruptions lerp from the right value.
+    private Color _leafCurrentColor;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private void Awake()
@@ -91,8 +121,6 @@ public class WorldToggle : MonoBehaviour
             _cam.clearFlags  = CameraClearFlags.SolidColor;
             _camOriginPos    = _cam.transform.localPosition;
 
-            // Attach the renderer component directly to the Camera so
-            // OnRenderImage is called correctly — this is the key fix.
             _glitchRenderer = _cam.gameObject.GetComponent<CameraGlitchRenderer>();
             if (_glitchRenderer == null)
                 _glitchRenderer = _cam.gameObject.AddComponent<CameraGlitchRenderer>();
@@ -104,6 +132,16 @@ public class WorldToggle : MonoBehaviour
                                  vignetteColor, vignetteFadeSpeed,
                                  vignetteInner, vignetteOuter, vignetteSteps);
         }
+
+        _audioSource = GetComponent<AudioSource>();
+        if (_audioSource == null)
+            _audioSource = gameObject.AddComponent<AudioSource>();
+        _audioSource.playOnAwake = false;
+        _audioSource.loop        = false;
+        _audioSource.volume      = switchSoundVolume;
+
+        // Cache the original leaf start color before any world switch
+        CacheLeafColor();
 
         CacheWorldObjects();
         ApplyWorldImmediate(false);
@@ -118,6 +156,33 @@ public class WorldToggle : MonoBehaviour
         if (IsMonoWorld == mono) return;
         IsMonoWorld = mono;
 
+        // ── Sound ─────────────────────────────────────────────────────────────
+        if (_audioSource != null)
+        {
+            if (_holdSoundRoutine != null)
+            {
+                StopCoroutine(_holdSoundRoutine);
+                _holdSoundRoutine = null;
+            }
+            _audioSource.loop = false;
+            _audioSource.Stop();
+            _audioSource.volume = switchSoundVolume;
+
+            if (mono)
+            {
+                if (shiftPressSound != null)
+                    _audioSource.PlayOneShot(shiftPressSound, switchSoundVolume);
+
+                if (shiftHoldSound != null)
+                    _holdSoundRoutine = StartCoroutine(PlayHoldSoundAfterPress());
+            }
+            else
+            {
+                if (shiftReleaseSound != null)
+                    _audioSource.PlayOneShot(shiftReleaseSound, switchSoundVolume);
+            }
+        }
+
         // Background transition
         if (_bgRoutine != null) StopCoroutine(_bgRoutine);
         _bgRoutine = StartCoroutine(BackgroundRoutine(mono));
@@ -129,9 +194,13 @@ public class WorldToggle : MonoBehaviour
             _shakeRoutine = StartCoroutine(ShakeRoutine());
         }
 
-        // Trigger all glitch effects on the camera-side renderer
+        // Glitch effects
         if (_glitchRenderer != null)
             _glitchRenderer.TriggerEffects(mono);
+
+        // Leaf particles BLACK transition
+        if (_leafColorRoutine != null) StopCoroutine(_leafColorRoutine);
+        _leafColorRoutine = StartCoroutine(LeafColorRoutine(mono));
 
         ToggleWorldObjects(mono);
         ToggleDustAndFog(mono);
@@ -144,6 +213,20 @@ public class WorldToggle : MonoBehaviour
     }
 
     // ── Coroutines ────────────────────────────────────────────────────────────
+    private IEnumerator PlayHoldSoundAfterPress()
+    {
+        float wait = shiftPressSound != null ? shiftPressSound.length : 0f;
+        yield return new WaitForSeconds(wait);
+
+        if (IsMonoWorld && _audioSource != null && shiftHoldSound != null)
+        {
+            _audioSource.clip   = shiftHoldSound;
+            _audioSource.loop   = true;
+            _audioSource.volume = switchSoundVolume;
+            _audioSource.Play();
+        }
+    }
+
     private IEnumerator BackgroundRoutine(bool toMono)
     {
         Color from    = _cam.backgroundColor;
@@ -187,12 +270,129 @@ public class WorldToggle : MonoBehaviour
         _cam.transform.localRotation = Quaternion.identity;
     }
 
+    /// <summary>
+    /// FIXED: Properly transitions leaf particles to BLACK and back to original color
+    /// </summary>
+    private IEnumerator LeafColorRoutine(bool toMono)
+    {
+        if (leafParticles == null) yield break;
+
+        // Snapshot where we are RIGHT NOW (handles mid-transition interrupts)
+        Color fromColor = _leafCurrentColor;
+        Color toColor   = toMono ? _leafBlackColor : _leafOriginalColor;
+
+        float elapsed  = 0f;
+        float duration = leafColorTransitionDuration > 0f ? leafColorTransitionDuration : 0.001f;
+
+        // Pre-allocate particle buffer once
+        ParticleSystem.Particle[] particles = new ParticleSystem.Particle[leafParticles.main.maxParticles];
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t  = Mathf.Clamp01(elapsed / duration);
+
+            // Apply easing curve for smoother transition
+            t = Mathf.SmoothStep(0f, 1f, t);
+
+            // Blended RGB for this frame
+            Color blended = Color.Lerp(fromColor, toColor, t);
+            _leafCurrentColor = blended;
+
+            // Update startColor so NEW particles spawn with the right color
+            var mainModule = leafParticles.main;
+            mainModule.startColor = new ParticleSystem.MinMaxGradient(blended);
+
+            // Recolor all currently ALIVE particles
+            int count = leafParticles.GetParticles(particles);
+            for (int i = 0; i < count; i++)
+            {
+                Color pc = particles[i].startColor;
+                
+                // Calculate the target color (preserve alpha, only modify RGB)
+                float targetR = Mathf.Lerp(fromColor.r, toColor.r, t);
+                float targetG = Mathf.Lerp(fromColor.g, toColor.g, t);
+                float targetB = Mathf.Lerp(fromColor.b, toColor.b, t);
+                
+                particles[i].startColor = new Color(targetR, targetG, targetB, pc.a);
+            }
+            leafParticles.SetParticles(particles, count);
+
+            yield return null;
+        }
+
+        // Snap everything to the final target
+        _leafCurrentColor = toColor;
+
+        var finalModule = leafParticles.main;
+        finalModule.startColor = new ParticleSystem.MinMaxGradient(toColor);
+
+        // Update all existing particles to final color
+        int finalCount = leafParticles.GetParticles(particles);
+        for (int i = 0; i < finalCount; i++)
+        {
+            Color pc = particles[i].startColor;
+            particles[i].startColor = new Color(toColor.r, toColor.g, toColor.b, pc.a);
+        }
+        leafParticles.SetParticles(particles, finalCount);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads and caches the LeafParticles startColor and creates BLACK color version
+    /// </summary>
+    private void CacheLeafColor()
+    {
+        if (_leafColorCached || leafParticles == null) return;
+
+        // Get the original color
+        if (leafParticles.main.startColor.mode == ParticleSystemGradientMode.Color)
+        {
+            _leafOriginalColor = leafParticles.main.startColor.color;
+        }
+        else
+        {
+            // Fallback if using gradient mode
+            _leafOriginalColor = Color.white;
+        }
+        
+        _leafCurrentColor = _leafOriginalColor;
+
+        // Create BLACK color (preserve original alpha)
+        _leafBlackColor = new Color(0f, 0f, 0f, _leafOriginalColor.a);
+
+        _leafColorCached = true;
+        
+        // Debug to verify colors are set
+        Debug.Log($"Original leaf color: {_leafOriginalColor}, Black color: {_leafBlackColor}");
+    }
+
     private void ApplyWorldImmediate(bool mono)
     {
         if (_cam != null) _cam.backgroundColor = mono ? monoWorldBg : colorWorldBg;
         ToggleWorldObjects(mono);
         ToggleDustAndFog(mono);
+
+        // Apply leaf color instantly (no transition) on startup
+        if (leafParticles != null)
+        {
+            Color target      = mono ? _leafBlackColor : _leafOriginalColor;
+            _leafCurrentColor = target;
+
+            var mainModule = leafParticles.main;
+            mainModule.startColor = new ParticleSystem.MinMaxGradient(target);
+            
+            // Also update existing particles
+            ParticleSystem.Particle[] particles = new ParticleSystem.Particle[leafParticles.main.maxParticles];
+            int count = leafParticles.GetParticles(particles);
+            for (int i = 0; i < count; i++)
+            {
+                Color pc = particles[i].startColor;
+                particles[i].startColor = new Color(target.r, target.g, target.b, pc.a);
+            }
+            leafParticles.SetParticles(particles, count);
+        }
     }
 
     private void ToggleWorldObjects(bool mono)
@@ -203,14 +403,12 @@ public class WorldToggle : MonoBehaviour
 
     private void ToggleDustAndFog(bool mono)
     {
-        // Hide DustMain particles in Mono world; restore in Color world
         if (dustMain != null)
         {
             if (mono) dustMain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             else      dustMain.Play();
         }
 
-        // Tell the glitch renderer to fade vignette in/out
         if (_glitchRenderer != null)
             _glitchRenderer.SetVignetteTarget(mono);
     }
@@ -230,7 +428,6 @@ public class WorldToggle : MonoBehaviour
     private void TestColor() { IsMonoWorld = true; SetWorld(false); }
 #endif
 }
-
 
 /// <summary>
 /// CameraGlitchRenderer
@@ -268,7 +465,7 @@ public class CameraGlitchRenderer : MonoBehaviour
     private float _chromaTimer;
 
     private float _flashAlpha;
-    private float _vignetteAlpha = 0f;   // 0=off 1=fully on
+    private float _vignetteAlpha = 0f;
     private float _vignetteTarget = 0f;
 
     private struct GlitchLine
@@ -301,7 +498,6 @@ public class CameraGlitchRenderer : MonoBehaviour
         _vignetteOuter      = vignetteOuter;
         _vignetteSteps      = vignetteSteps;
 
-        // Unlit blended material for GL
         _mat = new Material(Shader.Find("Hidden/Internal-Colored"))
         {
             hideFlags = HideFlags.HideAndDontSave
@@ -354,12 +550,11 @@ public class CameraGlitchRenderer : MonoBehaviour
         if (_flashAlpha > 0f)
             _flashAlpha = Mathf.Max(0f, _flashAlpha - dt * (_flashPeakAlpha / (_flashDuration * 0.5f)));
 
-        // Smooth vignette fade in/out
         _vignetteAlpha = Mathf.MoveTowards(_vignetteAlpha, _vignetteTarget,
                                             _vignetteFadeSpeed * dt);
     }
 
-    // ── OnRenderImage — must be on the Camera GameObject ─────────────────────
+    // ── OnRenderImage ─────────────────────────────────────────────────────────
     private void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
         if (!_glitching && !_chromaActive && _flashAlpha <= 0f && _vignetteAlpha <= 0f)
@@ -413,14 +608,12 @@ public class CameraGlitchRenderer : MonoBehaviour
                 float sy = (i / 6f) * Screen.height;
                 float ey = sy + stripH * 0.6f;
 
-                // Red — shifted left
                 GL.Color(new Color(1f, 0.1f, 0.1f, 0.18f * ct));
                 GL.Vertex3(-offset,               sy, 0);
                 GL.Vertex3(Screen.width - offset, sy, 0);
                 GL.Vertex3(Screen.width - offset, ey, 0);
                 GL.Vertex3(-offset,               ey, 0);
 
-                // Cyan — shifted right
                 GL.Color(new Color(0.1f, 0.9f, 1f, 0.18f * ct));
                 GL.Vertex3(offset,                sy, 0);
                 GL.Vertex3(Screen.width + offset, sy, 0);
@@ -446,7 +639,7 @@ public class CameraGlitchRenderer : MonoBehaviour
             GL.End();
         }
 
-        // ── Mono vignette overlay ────────────────────────────────────────────
+        // ── Mono vignette overlay ─────────────────────────────────────────────
         if (_vignetteAlpha > 0f)
         {
             float cx     = Screen.width  * 0.5f;
@@ -465,13 +658,11 @@ public class CameraGlitchRenderer : MonoBehaviour
                 float a0 = i       * step * Mathf.Deg2Rad;
                 float a1 = (i + 1) * step * Mathf.Deg2Rad;
 
-                // Inner point — transparent
                 float ix0 = cx + Mathf.Cos(a0) * innerR;
                 float iy0 = cy + Mathf.Sin(a0) * innerR;
                 float ix1 = cx + Mathf.Cos(a1) * innerR;
                 float iy1 = cy + Mathf.Sin(a1) * innerR;
 
-                // Outer point — full vignette alpha
                 float ox0 = cx + Mathf.Cos(a0) * outerR;
                 float oy0 = cy + Mathf.Sin(a0) * outerR;
                 float ox1 = cx + Mathf.Cos(a1) * outerR;
@@ -481,31 +672,27 @@ public class CameraGlitchRenderer : MonoBehaviour
                 Color transparent = new Color(vc.r, vc.g, vc.b, 0f);
                 Color opaque      = new Color(vc.r, vc.g, vc.b, finalAlpha);
 
-                // Triangle 1 — inner edge to outer edge
                 GL.Color(transparent); GL.Vertex3(ix0, iy0, 0);
                 GL.Color(opaque);      GL.Vertex3(ox0, oy0, 0);
                 GL.Color(opaque);      GL.Vertex3(ox1, oy1, 0);
 
-                // Triangle 2 — close the quad
                 GL.Color(transparent); GL.Vertex3(ix0, iy0, 0);
                 GL.Color(opaque);      GL.Vertex3(ox1, oy1, 0);
                 GL.Color(transparent); GL.Vertex3(ix1, iy1, 0);
             }
             GL.End();
 
-            // Fill corners beyond outerR (screen edges) with solid color
             GL.Begin(GL.QUADS);
             GL.Color(new Color(vc.r, vc.g, vc.b, vc.a * _vignetteAlpha));
-            // Top strip
             GL.Vertex3(0,            0,  0); GL.Vertex3(Screen.width, 0,  0);
             GL.Vertex3(Screen.width, cy - outerR, 0); GL.Vertex3(0, cy - outerR, 0);
-            // Bottom strip
+
             GL.Vertex3(0,            cy + outerR, 0); GL.Vertex3(Screen.width, cy + outerR, 0);
             GL.Vertex3(Screen.width, Screen.height, 0); GL.Vertex3(0, Screen.height, 0);
-            // Left strip
+
             GL.Vertex3(0,            cy - outerR, 0); GL.Vertex3(cx - outerR, cy - outerR, 0);
             GL.Vertex3(cx - outerR,  cy + outerR, 0); GL.Vertex3(0,           cy + outerR, 0);
-            // Right strip
+
             GL.Vertex3(cx + outerR,  cy - outerR, 0); GL.Vertex3(Screen.width, cy - outerR, 0);
             GL.Vertex3(Screen.width, cy + outerR, 0); GL.Vertex3(cx + outerR,  cy + outerR, 0);
             GL.End();
