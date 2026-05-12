@@ -42,3 +42,27 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: Sky
+    uniqueID: 658334439
+    locked: 0
+  - name: Bigtrees
+    uniqueID: 3666205009
+    locked: 0
+  - name: Bushes
+    uniqueID: 3843608205
+    locked: 0
+  - name: bladtrees
+    uniqueID: 2347316775
+    locked: 0
+  - name: bigtree
+    uniqueID: 3164260605
+    locked: 0
+  - name: Player
+    uniqueID: 2743563655
+    locked: 0
+  - name: Blocks
+    uniqueID: 1399291731
+    locked: 0
+  - name: Particles
+    uniqueID: 1295165891
+    locked: 0
