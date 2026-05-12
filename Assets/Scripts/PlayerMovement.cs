@@ -24,6 +24,8 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] float visionCooldown = 2f;
 
     public static event Action<bool> OnWorldToggle; // true = monochrome
+    public static bool IsPlayerOverriding { get; private set; }
+    public static void BroadcastWorldState(bool mono) => OnWorldToggle?.Invoke(mono);
 
     public float VisionFraction => visionDuration > 0f ? visionTimer / visionDuration : 0f;
     public float CooldownFraction => visionCooldown > 0f ? cooldownTimer / visionCooldown : 0f;
@@ -117,7 +119,8 @@ public class PlayerMovement : MonoBehaviour
             if (isMonochrome)
             {
                 isMonochrome = false;
-                OnWorldToggle?.Invoke(false);
+                IsPlayerOverriding = false;
+                ApplyAutoOrDefault();
             }
             return;
         }
@@ -126,6 +129,7 @@ public class PlayerMovement : MonoBehaviour
 
         if (holding && visionTimer > 0f)
         {
+            IsPlayerOverriding = true;
             if (!isMonochrome)
             {
                 isMonochrome = true;
@@ -137,17 +141,27 @@ public class PlayerMovement : MonoBehaviour
             if (visionTimer <= 0f)
             {
                 visionTimer = 0f;
-                isMonochrome = false;
-                OnWorldToggle?.Invoke(false);
+                IsPlayerOverriding = false;
                 cooldownTimer = visionCooldown;
+                ApplyAutoOrDefault();
             }
         }
         else if (!holding && isMonochrome)
         {
-            isMonochrome = false;
-            OnWorldToggle?.Invoke(false);
+            IsPlayerOverriding = false;
             cooldownTimer = visionCooldown;
+            ApplyAutoOrDefault();
         }
+    }
+
+    void ApplyAutoOrDefault()
+    {
+        bool target = AutoWorldToggle.Instance != null
+            ? AutoWorldToggle.Instance.CurrentDesiredState
+            : false;
+
+        isMonochrome = target;
+        OnWorldToggle?.Invoke(target);
     }
 
     void OnDrawGizmosSelected()

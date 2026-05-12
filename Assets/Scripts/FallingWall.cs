@@ -60,12 +60,7 @@ public class FallingWall : MonoBehaviour
     void OnCollisionEnter2D(Collision2D col)
     {
         if (_falling && !_landed && col.gameObject.CompareTag("Ground"))
-        {
             OnLanded();
-            return;
-        }
-        if (!_triggered && col.gameObject.CompareTag(triggerTag))
-            Trigger();
     }
 
     void OnCollisionStay2D(Collision2D col)
