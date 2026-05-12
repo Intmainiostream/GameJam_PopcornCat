@@ -12,7 +12,7 @@ public class FallingWall : MonoBehaviour
     [SerializeField] private bool  fallOnce       = true;
 
     [Header("Landing")]
-    [SerializeField] private float destroyDelay   = -1f;
+    [SerializeField] private float destroyDelay   = 0f;
     [SerializeField] private ParticleSystem dustParticles;
 
     [Header("Audio")]
@@ -42,6 +42,7 @@ public class FallingWall : MonoBehaviour
         _rb.bodyType      = RigidbodyType2D.Kinematic;
         _rb.gravityScale  = 2f;
         _rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        _rb.constraints   = RigidbodyConstraints2D.FreezeRotation;
 
         _originPos = _rb.position;
 
@@ -139,8 +140,7 @@ public class FallingWall : MonoBehaviour
             dustParticles.Play();
         }
 
-        if (destroyDelay >= 0f)
-            StartCoroutine(DestroyAfterDelay());
+        StartCoroutine(DestroyAfterDelay());
     }
 
     IEnumerator DestroyAfterDelay()
