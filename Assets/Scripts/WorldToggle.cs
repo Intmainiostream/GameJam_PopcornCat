@@ -73,13 +73,8 @@ public class WorldToggle : MonoBehaviour
         ApplyWorldImmediate(IsMonoWorld);
     }
 
-    private void Update()
-    {
-        bool shiftHeld = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-
-        if (shiftHeld && !IsMonoWorld) SetWorld(true);
-        else if (!shiftHeld && IsMonoWorld) SetWorld(false);
-    }
+    private void OnEnable()  => PlayerMovement.OnWorldToggle += SetWorld;
+    private void OnDisable() => PlayerMovement.OnWorldToggle -= SetWorld;
 
     // ── Public API ────────────────────────────────────────────────────────────
     /// <summary>Force a world change from code (e.g. for timed level events).</summary>
