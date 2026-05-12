@@ -1,26 +1,56 @@
-using System.Collections;
 using UnityEngine;
 
 public class TimedPlatform : MonoBehaviour
 {
     public enum WorldType { MonoOnly, ColorOnly }
+    public enum Difficulty { Default, Extreme }
 
-    [SerializeField] WorldType existsIn     = WorldType.MonoOnly;
-    [SerializeField] float activeDuration   = 3f;
-    [SerializeField] float blinkDuration    = 1f;
-    [SerializeField] float blinkRate        = 0.1f;
-    [SerializeField] float respawnDelay     = 3f;
+    enum Phase { Active, Blinking, Respawning }
+
+    [SerializeField] WorldType existsIn      = WorldType.MonoOnly;
+    [SerializeField] Difficulty difficulty   = Difficulty.Default;
+    [SerializeField] float activeDuration    = 3f;
+    [SerializeField] float blinkDuration     = 1f;
+    [SerializeField] float blinkRate         = 0.1f;
+    [SerializeField] float respawnDelay      = 3f;
+
+    [HideInInspector] [SerializeField] Difficulty lastDifficulty = Difficulty.Default;
+
+    void OnValidate()
+    {
+        if (difficulty == lastDifficulty) return;
+        lastDifficulty = difficulty;
+
+        if (difficulty == Difficulty.Default)
+        {
+            activeDuration = 3f;
+            blinkDuration  = 1f;
+            blinkRate      = 0.1f;
+            respawnDelay   = 3f;
+        }
+        else
+        {
+            activeDuration = 1.5f;
+            blinkDuration  = 0.5f;
+            blinkRate      = 0.05f;
+            respawnDelay   = 5f;
+        }
+    }
 
     SpriteRenderer sr;
     Collider2D col;
-    Coroutine cycle;
+
+    Phase phase = Phase.Active;
+    float timer;
+    float blinkAccum;
+    bool isWorldActive;
+    bool hasStarted;
 
     void Awake()
     {
         sr  = GetComponent<SpriteRenderer>();
         col = GetComponent<Collider2D>();
-        SetVisible(false);
-        col.enabled = false;
+        SetState(false);
     }
 
     void OnEnable()  => PlayerMovement.OnWorldToggle += OnWorldToggle;
@@ -29,42 +59,74 @@ public class TimedPlatform : MonoBehaviour
     void OnWorldToggle(bool isMonochrome)
     {
         bool shouldBeActive = existsIn == WorldType.MonoOnly ? isMonochrome : !isMonochrome;
+        isWorldActive = shouldBeActive;
 
-        if (shouldBeActive)
+        if (shouldBeActive && !hasStarted)
         {
-            if (cycle != null) StopCoroutine(cycle);
-            cycle = StartCoroutine(Cycle());
+            hasStarted = true;
+            phase = Phase.Active;
+            timer = activeDuration;
+            SetState(true);
+        }
+        else if (shouldBeActive)
+        {
+            // resume — restore visual based on current phase
+            bool visible = phase == Phase.Active || phase == Phase.Blinking;
+            SetState(visible);
         }
         else
         {
-            if (cycle != null) StopCoroutine(cycle);
-            cycle = null;
-            SetVisible(false);
-            col.enabled = false;
+            // pause — hide but keep timer exactly where it is
+            SetState(false);
         }
     }
 
-    IEnumerator Cycle()
+    void Update()
     {
-        while (true)
+        if (!isWorldActive) return;
+
+        timer -= Time.deltaTime;
+
+        switch (phase)
         {
-            SetVisible(true);
-            col.enabled = true;
-            yield return new WaitForSeconds(activeDuration);
+            case Phase.Active:
+                if (timer <= 0f)
+                {
+                    phase = Phase.Blinking;
+                    timer = blinkDuration;
+                    blinkAccum = 0f;
+                }
+                break;
 
-            float t = 0f;
-            while (t < blinkDuration)
-            {
-                sr.enabled = !sr.enabled;
-                yield return new WaitForSeconds(blinkRate);
-                t += blinkRate;
-            }
+            case Phase.Blinking:
+                blinkAccum += Time.deltaTime;
+                if (blinkAccum >= blinkRate)
+                {
+                    blinkAccum = 0f;
+                    sr.enabled = !sr.enabled;
+                }
+                if (timer <= 0f)
+                {
+                    phase = Phase.Respawning;
+                    timer = respawnDelay;
+                    SetState(false);
+                }
+                break;
 
-            SetVisible(false);
-            col.enabled = false;
-            yield return new WaitForSeconds(respawnDelay);
+            case Phase.Respawning:
+                if (timer <= 0f)
+                {
+                    phase = Phase.Active;
+                    timer = activeDuration;
+                    SetState(true);
+                }
+                break;
         }
     }
 
-    void SetVisible(bool visible) => sr.enabled = visible;
+    void SetState(bool visible)
+    {
+        sr.enabled  = visible;
+        col.enabled = visible;
+    }
 }

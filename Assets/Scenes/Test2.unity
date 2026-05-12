@@ -379,7 +379,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 160992122}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 12.73, y: 2.61, z: 0.07721851}
+  m_LocalPosition: {x: 12.73, y: 3.13, z: 0.07721851}
   m_LocalScale: {x: 2.4466329, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -399,10 +399,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   existsIn: 0
+  difficulty: 0
   activeDuration: 3
   blinkDuration: 1
   blinkRate: 0.1
   respawnDelay: 3
+  lastDifficulty: 0
 --- !u!114 &160992125
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6517,7 +6519,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 899284294}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 30.48, y: 1.7963526, z: 0.042485073}
+  m_LocalPosition: {x: 61.07, y: 1.7963526, z: 0.042485073}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -7215,10 +7217,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   existsIn: 0
-  activeDuration: 3
-  blinkDuration: 1
-  blinkRate: 0.1
-  respawnDelay: 3
+  difficulty: 1
+  activeDuration: 1.5
+  blinkDuration: 0.5
+  blinkRate: 0.05
+  respawnDelay: 5
+  lastDifficulty: 1
 --- !u!1 &1328430188
 GameObject:
   m_ObjectHideFlags: 0
@@ -7748,7 +7752,7 @@ MonoBehaviour:
   fallGravityScale: 2
   lowJumpGravityScale: 1
   visionDuration: 5
-  visionCooldown: 1
+  visionCooldown: 2.5
 --- !u!50 &1494966372
 Rigidbody2D:
   serializedVersion: 4
@@ -8874,10 +8878,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   existsIn: 0
-  activeDuration: 3
+  difficulty: 0
+  activeDuration: 6
   blinkDuration: 1
   blinkRate: 0.1
   respawnDelay: 3
+  lastDifficulty: 0
 --- !u!114 &2001314046
 MonoBehaviour:
   m_ObjectHideFlags: 0
