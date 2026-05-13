@@ -12638,7 +12638,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   existsIn: 0
   difficulty: 0
-  activeDuration: 4
+  activeDuration: 6
   blinkDuration: 1
   blinkRate: 0.1
   respawnDelay: 2
@@ -14353,7 +14353,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   existsIn: 0
   difficulty: 0
-  activeDuration: 5
+  activeDuration: 6
   blinkDuration: 1
   blinkRate: 0.1
   respawnDelay: 2
@@ -19940,6 +19940,9 @@ MonoBehaviour:
   nextSceneName: Level3Scene
   isLastLevel: 0
   endingTimeline: {fileID: 0}
+  endingSound: {fileID: 0}
+  blackBg: {fileID: 0}
+  blackBgDelay: 1.5
 --- !u!1 &1949301241
 GameObject:
   m_ObjectHideFlags: 0
@@ -20473,7 +20476,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   existsIn: 0
   difficulty: 0
-  activeDuration: 4
+  activeDuration: 6
   blinkDuration: 1
   blinkRate: 0.1
   respawnDelay: 1
