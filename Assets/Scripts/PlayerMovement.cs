@@ -30,8 +30,12 @@ public class PlayerMovement : MonoBehaviour
     public float VisionFraction => visionDuration > 0f ? visionTimer / visionDuration : 0f;
     public float CooldownFraction => visionCooldown > 0f ? cooldownTimer / visionCooldown : 0f;
     public bool IsOnCooldown => cooldownTimer > 0f;
+    public bool IsGroundedPublic => isGrounded;
 
     Rigidbody2D rb;
+    Animator anim;
+    SpriteRenderer sr;
+    PlayerSounds sounds;
     float coyoteTimer;
     float jumpBufferTimer;
     bool isGrounded;
@@ -39,10 +43,20 @@ public class PlayerMovement : MonoBehaviour
     float defaultGravityScale;
     float visionTimer;
     float cooldownTimer;
+    float jumpHeldTimer;
+    bool jumpStarted;
+
+    static readonly int SpeedHash      = Animator.StringToHash("Speed");
+    static readonly int IsGroundedHash = Animator.StringToHash("IsGrounded");
+    static readonly int LightJumpHash  = Animator.StringToHash("LightJump");
+    static readonly int BigJumpHash    = Animator.StringToHash("BigJump");
 
     void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
+        rb     = GetComponent<Rigidbody2D>();
+        anim   = GetComponent<Animator>();
+        sr     = GetComponent<SpriteRenderer>();
+        sounds = GetComponent<PlayerSounds>();
         defaultGravityScale = rb.gravityScale;
         visionTimer = visionDuration;
     }
@@ -55,12 +69,22 @@ public class PlayerMovement : MonoBehaviour
         HandleJump();
         HandleWorldToggle();
         ApplyGravityFeel();
+        UpdateAnimator();
     }
 
     void FixedUpdate()
     {
         float input = Input.GetAxisRaw("Horizontal");
         rb.velocity = new Vector2(input * moveSpeed, rb.velocity.y);
+
+        if (input != 0f) sr.flipX = input < 0f;
+    }
+
+    void UpdateAnimator()
+    {
+        if (anim == null) return;
+        anim.SetFloat(SpeedHash, Mathf.Abs(rb.velocity.x));
+        anim.SetBool(IsGroundedHash, isGrounded);
     }
 
     void CheckGround()
@@ -86,16 +110,30 @@ public class PlayerMovement : MonoBehaviour
 
     void HandleJump()
     {
+        if (Input.GetButtonDown("Jump")) jumpHeldTimer = 0f;
+        if (Input.GetButton("Jump"))     jumpHeldTimer += Time.deltaTime;
+
         if (jumpBufferTimer > 0f && coyoteTimer > 0f)
         {
-            rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+            rb.velocity     = new Vector2(rb.velocity.x, jumpForce);
             jumpBufferTimer = 0f;
-            coyoteTimer = 0f;
+            coyoteTimer     = 0f;
+            jumpStarted     = true;
+            sounds?.PlayLongJump();
         }
 
-        // Variable jump height — release Space early to cut jump short
-        if (Input.GetButtonUp("Jump") && rb.velocity.y > 0f)
-            rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * 0.5f);
+        if (Input.GetButtonUp("Jump"))
+        {
+            if (rb.velocity.y > 0f)
+                rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * 0.5f);
+
+            if (jumpStarted && anim != null)
+            {
+                if (jumpHeldTimer < 0.2f) anim.SetTrigger(LightJumpHash);
+                else anim.SetTrigger(BigJumpHash);
+                jumpStarted = false;
+            }
+        }
     }
 
     void ApplyGravityFeel()

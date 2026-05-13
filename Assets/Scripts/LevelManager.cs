@@ -4,7 +4,6 @@ using UnityEngine.SceneManagement;
 
 public class LevelManager : MonoBehaviour
 {
-    [SerializeField] GameObject levelCompleteUI;
     [SerializeField] string nextSceneName;
     [SerializeField] bool isLastLevel;
 
@@ -13,18 +12,17 @@ public class LevelManager : MonoBehaviour
         if (isLastLevel)
         {
             PlayerPrefs.SetInt("AllLevelsCompleted", 1);
-            StartCoroutine(LoadMainMenuAfterDelay());
+            StartCoroutine(LoadSceneAfterDelay("MainMenu"));
             return;
         }
 
-        levelCompleteUI.SetActive(true);
-        Time.timeScale = 0f;
+        StartCoroutine(LoadSceneAfterDelay(nextSceneName));
     }
 
-    IEnumerator LoadMainMenuAfterDelay()
+    IEnumerator LoadSceneAfterDelay(string sceneName)
     {
-        yield return new WaitForSeconds(1.5f);
-        SceneManager.LoadScene("MainMenu");
+        yield return new WaitForSeconds(0.5f);
+        SceneManager.LoadScene(sceneName);
     }
 
     public void NextLevel()

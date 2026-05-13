@@ -1,7 +1,10 @@
+using System;
 using UnityEngine;
 
 public class TimedPlatform : MonoBehaviour
 {
+    public static event Action OnBlinkStarted;
+
     public enum WorldType { MonoOnly, ColorOnly }
     public enum Difficulty { Default, Extreme }
 
@@ -95,6 +98,7 @@ public class TimedPlatform : MonoBehaviour
                     phase = Phase.Blinking;
                     timer = blinkDuration;
                     blinkAccum = 0f;
+                    OnBlinkStarted?.Invoke();
                 }
                 break;
 

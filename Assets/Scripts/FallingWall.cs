@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -5,6 +6,8 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public class FallingWall : MonoBehaviour
 {
+    public static event Action OnFallShakeStarted;
+
     [Header("Fall Settings")]
     [SerializeField] private float fallDelay      = 0.5f;
     [SerializeField] private float shakeAmplitude = 0.08f;
@@ -103,6 +106,7 @@ public class FallingWall : MonoBehaviour
 
     IEnumerator FallSequence()
     {
+        OnFallShakeStarted?.Invoke();
         PlaySfx(sfxShake, loop: true);
 
         float elapsed = 0f;

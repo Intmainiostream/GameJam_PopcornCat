@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -5,6 +6,8 @@ public class PlayerDeath : MonoBehaviour
 {
     [SerializeField] GameObject deathUI;
     [SerializeField] float fallThreshold = -10f;
+
+    public static event Action OnPlayerDied;
 
     bool isDead;
 
@@ -17,6 +20,7 @@ public class PlayerDeath : MonoBehaviour
     public void Die()
     {
         isDead = true;
+        OnPlayerDied?.Invoke();
         deathUI.SetActive(true);
         Time.timeScale = 0f;
     }
