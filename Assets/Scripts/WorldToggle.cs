@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -74,12 +75,24 @@ public class WorldToggle : MonoBehaviour
     [Tooltip("Volume for all sounds.")]
     [SerializeField] [Range(0f, 1f)] private float switchSoundVolume = 1f;
 
-    // ── Leaf Particles (BLACK in Mono world) ───────────────────────────────────
-    [Header("Leaf Particles (BLACK in Mono)")]
+    // ── Leaf Particles ────────────────────────────────────────────────────────
+    [Header("Leaf Particles")]
     [Tooltip("Drag the LeafParticles GameObject here (under Particles/FX).")]
     [SerializeField] private ParticleSystem leafParticles;
-    [Tooltip("How fast the leaf color transitions to black and back (seconds).")]
+    [Tooltip("How fast the leaf color transitions (seconds).")]
     [SerializeField] private float leafColorTransitionDuration = 0.25f;
+
+    // ── Background Sprites (with adjustable dark color) ───────────────────────
+    [Header("Background Sprites (Dark Gray in Mono)")]
+    [Tooltip("Drag all background objects here (including their children)")]
+    [SerializeField] private List<GameObject> backgroundSprites = new List<GameObject>();
+    
+    [Header("Dark Color Settings (Adjustable)")]
+    [Tooltip("Choose the color when holding Shift (dark gray, dark blue, etc.)")]
+    [SerializeField] private Color monoSpriteColor = new Color(0.15f, 0.15f, 0.15f, 1f); // Dark gray - YOU CAN EDIT THIS
+    
+    [Tooltip("How fast the sprite color transitions (seconds)")]
+    [SerializeField] private float spriteTransitionDuration = 0.25f;
 
     // ── Public ────────────────────────────────────────────────────────────────
     public static WorldToggle Instance { get; private set; }
@@ -94,6 +107,7 @@ public class WorldToggle : MonoBehaviour
     private Coroutine   _shakeRoutine;
     private Coroutine   _holdSoundRoutine;
     private Coroutine   _leafColorRoutine;
+    private Coroutine   _spriteColorRoutine;
     private AudioSource _audioSource;
 
     private GameObject[] _colorOnlyObjects = new GameObject[0];
@@ -101,12 +115,14 @@ public class WorldToggle : MonoBehaviour
 
     // Cached original leaf start color
     private Color _leafOriginalColor = Color.white;
-    private Color _leafBlackColor    = Color.black;   // BLACK color for mono world
+    private Color _leafMonoColor     = Color.white;
     private bool  _leafColorCached   = false;
-
-    // Tracks the CURRENT effective startColor (what newly spawned particles get)
-    // so mid-transition interruptions lerp from the right value.
     private Color _leafCurrentColor;
+
+    // For background sprites
+    private Dictionary<SpriteRenderer, Color> originalSpriteColors = new Dictionary<SpriteRenderer, Color>();
+    private List<SpriteRenderer> allSpriteRenderers = new List<SpriteRenderer>();
+    private bool spriteColorsCached = false;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     private void Awake()
@@ -140,8 +156,9 @@ public class WorldToggle : MonoBehaviour
         _audioSource.loop        = false;
         _audioSource.volume      = switchSoundVolume;
 
-        // Cache the original leaf start color before any world switch
+        // Cache colors
         CacheLeafColor();
+        CacheSpriteColors();
 
         CacheWorldObjects();
         ApplyWorldImmediate(false);
@@ -198,9 +215,13 @@ public class WorldToggle : MonoBehaviour
         if (_glitchRenderer != null)
             _glitchRenderer.TriggerEffects(mono);
 
-        // Leaf particles BLACK transition
+        // Leaf particles transition
         if (_leafColorRoutine != null) StopCoroutine(_leafColorRoutine);
         _leafColorRoutine = StartCoroutine(LeafColorRoutine(mono));
+
+        // Background sprites transition
+        if (_spriteColorRoutine != null) StopCoroutine(_spriteColorRoutine);
+        _spriteColorRoutine = StartCoroutine(SpriteColorRoutine(mono));
 
         ToggleWorldObjects(mono);
         ToggleDustAndFog(mono);
@@ -271,63 +292,50 @@ public class WorldToggle : MonoBehaviour
     }
 
     /// <summary>
-    /// FIXED: Properly transitions leaf particles to BLACK and back to original color
+    /// Transitions leaf particles to mono color and back
     /// </summary>
     private IEnumerator LeafColorRoutine(bool toMono)
     {
         if (leafParticles == null) yield break;
 
-        // Snapshot where we are RIGHT NOW (handles mid-transition interrupts)
         Color fromColor = _leafCurrentColor;
-        Color toColor   = toMono ? _leafBlackColor : _leafOriginalColor;
+        Color toColor   = toMono ? _leafMonoColor : _leafOriginalColor;
 
         float elapsed  = 0f;
         float duration = leafColorTransitionDuration > 0f ? leafColorTransitionDuration : 0.001f;
 
-        // Pre-allocate particle buffer once
         ParticleSystem.Particle[] particles = new ParticleSystem.Particle[leafParticles.main.maxParticles];
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t  = Mathf.Clamp01(elapsed / duration);
-
-            // Apply easing curve for smoother transition
             t = Mathf.SmoothStep(0f, 1f, t);
 
-            // Blended RGB for this frame
             Color blended = Color.Lerp(fromColor, toColor, t);
             _leafCurrentColor = blended;
 
-            // Update startColor so NEW particles spawn with the right color
             var mainModule = leafParticles.main;
             mainModule.startColor = new ParticleSystem.MinMaxGradient(blended);
 
-            // Recolor all currently ALIVE particles
             int count = leafParticles.GetParticles(particles);
             for (int i = 0; i < count; i++)
             {
                 Color pc = particles[i].startColor;
-                
-                // Calculate the target color (preserve alpha, only modify RGB)
-                float targetR = Mathf.Lerp(fromColor.r, toColor.r, t);
-                float targetG = Mathf.Lerp(fromColor.g, toColor.g, t);
-                float targetB = Mathf.Lerp(fromColor.b, toColor.b, t);
-                
-                particles[i].startColor = new Color(targetR, targetG, targetB, pc.a);
+                particles[i].startColor = new Color(
+                    Mathf.Lerp(fromColor.r, toColor.r, t),
+                    Mathf.Lerp(fromColor.g, toColor.g, t),
+                    Mathf.Lerp(fromColor.b, toColor.b, t),
+                    pc.a);
             }
             leafParticles.SetParticles(particles, count);
-
             yield return null;
         }
 
-        // Snap everything to the final target
         _leafCurrentColor = toColor;
-
         var finalModule = leafParticles.main;
         finalModule.startColor = new ParticleSystem.MinMaxGradient(toColor);
 
-        // Update all existing particles to final color
         int finalCount = leafParticles.GetParticles(particles);
         for (int i = 0; i < finalCount; i++)
         {
@@ -337,35 +345,127 @@ public class WorldToggle : MonoBehaviour
         leafParticles.SetParticles(particles, finalCount);
     }
 
+    /// <summary>
+    /// Transitions all background sprites (including 2 child objects) to mono color and back
+    /// </summary>
+    private IEnumerator SpriteColorRoutine(bool toMono)
+    {
+        if (!spriteColorsCached || allSpriteRenderers.Count == 0) yield break;
+
+        float elapsed = 0f;
+        float duration = spriteTransitionDuration > 0f ? spriteTransitionDuration : 0.001f;
+
+        // Store current colors and target colors
+        Dictionary<SpriteRenderer, Color> currentColors = new Dictionary<SpriteRenderer, Color>();
+        Dictionary<SpriteRenderer, Color> targetColors = new Dictionary<SpriteRenderer, Color>();
+
+        foreach (SpriteRenderer sr in allSpriteRenderers)
+        {
+            if (sr == null) continue;
+            currentColors[sr] = sr.color;
+            
+            if (toMono)
+            {
+                // Going to mono world - use the adjustable monoSpriteColor
+                targetColors[sr] = new Color(
+                    monoSpriteColor.r,
+                    monoSpriteColor.g,
+                    monoSpriteColor.b,
+                    sr.color.a // preserve original alpha
+                );
+            }
+            else
+            {
+                // Going back to color world - restore original color
+                if (originalSpriteColors.ContainsKey(sr))
+                {
+                    targetColors[sr] = originalSpriteColors[sr];
+                }
+                else
+                {
+                    targetColors[sr] = sr.color;
+                }
+            }
+        }
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            t = Mathf.SmoothStep(0f, 1f, t);
+
+            foreach (SpriteRenderer sr in allSpriteRenderers)
+            {
+                if (sr == null) continue;
+                
+                Color from = currentColors[sr];
+                Color to = targetColors[sr];
+                
+                sr.color = new Color(
+                    Mathf.Lerp(from.r, to.r, t),
+                    Mathf.Lerp(from.g, to.g, t),
+                    Mathf.Lerp(from.b, to.b, t),
+                    Mathf.Lerp(from.a, to.a, t)
+                );
+            }
+            
+            yield return null;
+        }
+
+        // Final snap to target colors
+        foreach (SpriteRenderer sr in allSpriteRenderers)
+        {
+            if (sr == null) continue;
+            sr.color = targetColors[sr];
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Reads and caches the LeafParticles startColor and creates BLACK color version
-    /// </summary>
     private void CacheLeafColor()
     {
         if (_leafColorCached || leafParticles == null) return;
 
-        // Get the original color
         if (leafParticles.main.startColor.mode == ParticleSystemGradientMode.Color)
         {
             _leafOriginalColor = leafParticles.main.startColor.color;
         }
         else
         {
-            // Fallback if using gradient mode
             _leafOriginalColor = Color.white;
         }
         
         _leafCurrentColor = _leafOriginalColor;
-
-        // Create BLACK color (preserve original alpha)
-        _leafBlackColor = new Color(0f, 0f, 0f, _leafOriginalColor.a);
-
+        _leafMonoColor = monoSpriteColor; // Use the same adjustable color
         _leafColorCached = true;
+    }
+
+    private void CacheSpriteColors()
+    {
+        if (spriteColorsCached) return;
         
-        // Debug to verify colors are set
-        Debug.Log($"Original leaf color: {_leafOriginalColor}, Black color: {_leafBlackColor}");
+        allSpriteRenderers.Clear();
+        originalSpriteColors.Clear();
+        
+        foreach (GameObject bgObj in backgroundSprites)
+        {
+            if (bgObj == null) continue;
+            
+            // Get ALL SpriteRenderers in this object AND its children (including 2 child objects)
+            SpriteRenderer[] renderers = bgObj.GetComponentsInChildren<SpriteRenderer>(true);
+            
+            foreach (SpriteRenderer sr in renderers)
+            {
+                if (!allSpriteRenderers.Contains(sr))
+                {
+                    allSpriteRenderers.Add(sr);
+                    originalSpriteColors[sr] = sr.color;
+                }
+            }
+        }
+        
+        spriteColorsCached = true;
+        Debug.Log($"Cached {originalSpriteColors.Count} sprite colors from {backgroundSprites.Count} background objects (including children)");
     }
 
     private void ApplyWorldImmediate(bool mono)
@@ -374,16 +474,15 @@ public class WorldToggle : MonoBehaviour
         ToggleWorldObjects(mono);
         ToggleDustAndFog(mono);
 
-        // Apply leaf color instantly (no transition) on startup
+        // Apply leaf color instantly
         if (leafParticles != null)
         {
-            Color target      = mono ? _leafBlackColor : _leafOriginalColor;
+            Color target = mono ? _leafMonoColor : _leafOriginalColor;
             _leafCurrentColor = target;
 
             var mainModule = leafParticles.main;
             mainModule.startColor = new ParticleSystem.MinMaxGradient(target);
             
-            // Also update existing particles
             ParticleSystem.Particle[] particles = new ParticleSystem.Particle[leafParticles.main.maxParticles];
             int count = leafParticles.GetParticles(particles);
             for (int i = 0; i < count; i++)
@@ -392,6 +491,32 @@ public class WorldToggle : MonoBehaviour
                 particles[i].startColor = new Color(target.r, target.g, target.b, pc.a);
             }
             leafParticles.SetParticles(particles, count);
+        }
+
+        // Apply sprite colors instantly
+        if (allSpriteRenderers.Count > 0)
+        {
+            foreach (SpriteRenderer sr in allSpriteRenderers)
+            {
+                if (sr == null) continue;
+                
+                if (mono)
+                {
+                    sr.color = new Color(
+                        monoSpriteColor.r,
+                        monoSpriteColor.g,
+                        monoSpriteColor.b,
+                        sr.color.a
+                    );
+                }
+                else
+                {
+                    if (originalSpriteColors.ContainsKey(sr))
+                    {
+                        sr.color = originalSpriteColors[sr];
+                    }
+                }
+            }
         }
     }
 
@@ -419,6 +544,15 @@ public class WorldToggle : MonoBehaviour
         catch { return new GameObject[0]; }
     }
 
+    // Public method to refresh sprite cache (call if you add/remove sprites at runtime)
+    public void RefreshSpriteCache()
+    {
+        spriteColorsCached = false;
+        allSpriteRenderers.Clear();
+        originalSpriteColors.Clear();
+        CacheSpriteColors();
+    }
+
     // ── Editor test ───────────────────────────────────────────────────────────
 #if UNITY_EDITOR
     [ContextMenu("Test → Mono")]
@@ -426,6 +560,13 @@ public class WorldToggle : MonoBehaviour
 
     [ContextMenu("Test → Color")]
     private void TestColor() { IsMonoWorld = true; SetWorld(false); }
+    
+    [ContextMenu("Refresh Sprite Cache")]
+    private void RefreshSpriteCacheEditor()
+    {
+        RefreshSpriteCache();
+        Debug.Log("Sprite cache refreshed!");
+    }
 #endif
 }
 
